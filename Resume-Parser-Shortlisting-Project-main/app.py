@@ -176,10 +176,6 @@ def register():
             return redirect(url_for('register'))
     return render_template('register.html')
 
-
-
-
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -188,9 +184,59 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
             login_user(user)
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('admin_dashboard'))
         flash('Invalid credentials', 'danger')
     return render_template('login.html')
+
+@app.route('/admin/dashboard', methods=['GET', 'POST'])
+@login_required
+def admin_dashboard():
+    if current_user.role != 'admin':
+        flash('Access denied. Only admins can access this page.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add_user':
+            username = request.form['username']
+            password = request.form['password']
+            role = request.form['role']
+            if User.query.filter_by(username=username).first():
+                flash('Username already exists', 'danger')
+            else:
+                hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+                new_user = User(username=username, password=hashed_password, role=role)
+                db.session.add(new_user)
+                db.session.commit()
+                flash('User added successfully', 'success')
+        elif action == 'update_role':
+            user_id = request.form['user_id']
+            new_role = request.form['new_role']
+            user = User.query.get(user_id)
+            if user:
+                user.role = new_role
+                db.session.commit()
+                flash(f"Role updated for {user.username} to {new_role}", 'success')
+            else:
+                flash('User not found', 'danger')
+        elif action == 'delete_user':
+            user_id = request.form['user_id']
+            user = User.query.get(user_id)
+            if user:
+                db.session.delete(user)
+                db.session.commit()
+                flash(f"User {user.username} deleted", 'success')
+            else:
+                flash('User not found', 'danger')
+
+    users = User.query.all()
+    return render_template('admin_dashboard.html', users=users)
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
 
 @app.route('/dashboard')
 @login_required
@@ -201,35 +247,6 @@ def dashboard():
         return render_template('index.html')
     else:
         return render_template('user_dashboard.html')
-
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
-
-@app.route('/admin/modify_roles', methods=['GET', 'POST'])
-@login_required
-def modify_roles():
-    if current_user.role != 'admin':
-        flash('Access denied. Only admins can modify roles.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    if request.method == 'POST':
-        user_id = request.form['user_id']
-        new_role = request.form['new_role']
-        user = User.query.get(user_id)
-        if user:
-            user.role = new_role
-            db.session.commit()
-            flash(f"Role updated for {user.username} to {new_role}", 'success')
-        else:
-            flash('User not found', 'danger')
-    users = User.query.all()
-    return render_template('modify_roles.html', users=users)
-
-
 
 if __name__ == '__main__':
     app.run(port=8080, debug=True)
