@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modify Roles</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
+</head>
+<body>
+<div class="container mt-5">
+    <h1>Modify User Roles</h1>
+    <form method="POST">
+        <div class="form-group">
+            <label for="user_id">Select User</label>
+            <select id="user_id" name="user_id" class="form-control" required>
+                {% for user in users %}
+                    <option value="{{ user.id }}">{{ user.username }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="new_role">New Role</label>
+            <select id="new_role" name="new_role" class="form-control" required>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+                <option value="project_manager">Project Manager</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Update Role</button>
+    </form>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-link">Back to Dashboard</a>
+</div>
+</body>
+</html>

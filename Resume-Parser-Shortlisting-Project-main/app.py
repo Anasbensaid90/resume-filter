@@ -57,7 +57,7 @@ def allowed_file(filename):
 
 @app.route('/', methods=['GET'])
 def main_page():
-    return _show_page()
+    return redirect(url_for('register'))
 
 @app.route('/', methods=['POST'])
 def upload_file():
@@ -167,14 +167,15 @@ def register():
             app.logger.info(f"Successfully registered user: {username}, Role: {role}")
             flash('Registration Successful!', 'success')
 
-            # Redirect to the user dashboard
-            return redirect(url_for('user_dashboard'))
+            # Redirect to the login page
+            return redirect(url_for('login'))
 
         except Exception as e:
             app.logger.error(f"Error during registration: {e}")
             flash(f'An error occurred during registration. Please try again. Error: {e}', 'danger')
             return redirect(url_for('register'))
     return render_template('register.html')
+
 
 
 
@@ -197,9 +198,10 @@ def dashboard():
     if current_user.role == 'admin':
         return render_template('admin_dashboard.html')
     elif current_user.role == 'project_manager':
-        return render_template('project_manager_dashboard.html')
+        return render_template('index.html')
     else:
         return render_template('user_dashboard.html')
+
 
 @app.route('/logout')
 @login_required
