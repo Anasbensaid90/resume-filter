@@ -55,9 +55,13 @@ def load_user(user_id):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route('/', methods=['GET'])
+@app.route('/')
+def home():
+    return render_template('home.html')
+
+@app.route('/main', methods=['GET'])
 def main_page():
-    return redirect(url_for('register'))
+    return redirect(url_for('home'))
 
 @app.route('/', methods=['POST'])
 def upload_file():
