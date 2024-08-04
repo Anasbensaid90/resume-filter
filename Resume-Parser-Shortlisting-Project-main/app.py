@@ -8,9 +8,13 @@ import pandas as pd
 import json
 import os
 import uuid
-from flask import Flask, flash, request, redirect, url_for, render_template, send_file
+from flask import Flask, flash, request, redirect, url_for, render_template, send_file, abort
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
+from werkzeug.security import generate_password_hash, check_password_hash
 
-#used directories for data, downloading and uploading files 
+
+# used directories for data, downloading and uploading files
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files/resumes/')
 DOWNLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files/outputs/')
 DATA_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Data/')
@@ -22,24 +26,39 @@ if not os.path.isdir(UPLOAD_FOLDER):
 # Make directory if DOWNLOAD_FOLDER does not exist
 if not os.path.isdir(DOWNLOAD_FOLDER):
     os.mkdir(DOWNLOAD_FOLDER)
-#Flask app config 
-app = Flask(__name__)
+
+# Flask app config
+app = Flask(__name__, instance_relative_config=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['DOWNLOAD_FOLDER'] = DOWNLOAD_FOLDER
 app.config['DATA_FOLDER'] = DATA_FOLDER
 app.config['SECRET_KEY'] = 'nani?!'
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(app.instance_path, 'users.db')}"
+db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
 
 # Allowed extension you can set your own
-ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'doc','docx'])
+ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'doc', 'docx'])
 
+# User model
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
+    role = db.Column(db.String(50), nullable=False)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
- 
+
 @app.route('/', methods=['GET'])
 def main_page():
     return _show_page()
- 
+
 @app.route('/', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -48,8 +67,6 @@ def upload_file():
     app.logger.info(request.files)
     upload_files = request.files.getlist('file')
     app.logger.info(upload_files)
-    # If the user does not select a file, the browser submits an
-    # empty file without a filename.
     if not upload_files:
         flash('No selected file')
         return redirect(request.url)
@@ -64,11 +81,10 @@ def upload_file():
             files[filename] = original_filename
             with open(file_list, 'w') as fh:
                 json.dump(files, fh)
- 
+
     flash('Upload succeeded')
     return redirect(url_for('upload_file'))
- 
- 
+
 @app.route('/download/<code>', methods=['GET'])
 def download(code):
     files = _get_files()
@@ -77,11 +93,11 @@ def download(code):
         if os.path.exists(path):
             return send_file(path)
     abort(404)
- 
+
 def _show_page():
     files = _get_files()
     return render_template('index.html', files=files)
- 
+
 def _get_files():
     file_list = os.path.join(UPLOAD_FOLDER, 'files.json')
     if os.path.exists(file_list):
@@ -89,14 +105,13 @@ def _get_files():
             return json.load(fh)
     return {}
 
-
-@app.route('/process',methods=["POST"])
+@app.route('/process', methods=["POST"])
+@login_required
 def process():
     if request.method == 'POST':
-
         rawtext = request.form['rawtext']
-        jdtxt=[rawtext]
-        resumetxt=read_files(UPLOAD_FOLDER)
+        jdtxt = [rawtext]
+        resumetxt = read_files(UPLOAD_FOLDER)
         p_resumetxt = preprocess(resumetxt)
         p_jdtxt = preprocess(jdtxt)
 
@@ -105,32 +120,114 @@ def process():
 
         df = simil(feats_red, p_resumetxt, p_jdtxt)
 
-        t = pd.DataFrame({'Original Resume':resumetxt})
-        dt = pd.concat([df,t],axis=1)
+        t = pd.DataFrame({'Original Resume': resumetxt})
+        dt = pd.concat([df, t], axis=1)
 
-        dt['Phone No.']=dt['Original Resume'].apply(lambda x: get_number(x))
-        
-        dt['E-Mail ID']=dt['Original Resume'].apply(lambda x: get_email(x))
+        dt['Phone No.'] = dt['Original Resume'].apply(lambda x: get_number(x))
+        dt['E-Mail ID'] = dt['Original Resume'].apply(lambda x: get_email(x))
 
-        dt['Original']=dt['Original Resume'].apply(lambda x: rm_number(x))
-        dt['Original']=dt['Original'].apply(lambda x: rm_email(x))
-        dt['Candidate\'s Name']=dt['Original'].apply(lambda x: get_name(x))
+        dt['Original'] = dt['Original Resume'].apply(lambda x: rm_number(x))
+        dt['Original'] = dt['Original'].apply(lambda x: rm_email(x))
+        dt['Candidate\'s Name'] = dt['Original'].apply(lambda x: get_name(x))
 
-        skills = pd.read_csv(DATA_FOLDER+'skill_red.csv')
+        skills = pd.read_csv(DATA_FOLDER + 'skill_red.csv')
         skills = skills.values.flatten().tolist()
-        skill = []
-        for z in skills:
-            r = z.lower()
-            skill.append(r)
+        skill = [z.lower() for z in skills]
 
-        dt['Skills']=dt['Original'].apply(lambda x: get_skills(x,skill))
-        dt = dt.drop(columns=['Original','Original Resume'])
+        dt['Skills'] = dt['Original'].apply(lambda x: get_skills(x, skill))
+        dt = dt.drop(columns=['Original', 'Original Resume'])
         sorted_dt = dt.sort_values(by=['JD 1'], ascending=False)
 
-        out_path = DOWNLOAD_FOLDER+"Candidates.csv"
-        sorted_dt.to_csv(out_path,index=False)
+        out_path = DOWNLOAD_FOLDER + "Candidates.csv"
+        sorted_dt.to_csv(out_path, index=False)
 
         return send_file(out_path, as_attachment=True)
 
-if __name__=="__main__":
-    app.run(port=8080, debug=False)
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        try:
+            username = request.form['username']
+            password = request.form['password']
+            role = 'user'  # Set default role to 'user'
+
+            # Check if the username already exists
+            existing_user = User.query.filter_by(username=username).first()
+            if existing_user:
+                flash('Username already exists', 'danger')
+                app.logger.info(f"Registration failed: Username already exists for {username}")
+                return redirect(url_for('register'))
+
+            # Hash the password
+            hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+            new_user = User(username=username, password=hashed_password, role=role)
+            db.session.add(new_user)
+            db.session.commit()
+
+            app.logger.info(f"Successfully registered user: {username}, Role: {role}")
+            flash('Registration Successful!', 'success')
+
+            # Redirect to the user dashboard
+            return redirect(url_for('user_dashboard'))
+
+        except Exception as e:
+            app.logger.error(f"Error during registration: {e}")
+            flash(f'An error occurred during registration. Please try again. Error: {e}', 'danger')
+            return redirect(url_for('register'))
+    return render_template('register.html')
+
+
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            login_user(user)
+            return redirect(url_for('dashboard'))
+        flash('Invalid credentials', 'danger')
+    return render_template('login.html')
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    if current_user.role == 'admin':
+        return render_template('admin_dashboard.html')
+    elif current_user.role == 'project_manager':
+        return render_template('project_manager_dashboard.html')
+    else:
+        return render_template('user_dashboard.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route('/admin/modify_roles', methods=['GET', 'POST'])
+@login_required
+def modify_roles():
+    if current_user.role != 'admin':
+        flash('Access denied. Only admins can modify roles.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        user_id = request.form['user_id']
+        new_role = request.form['new_role']
+        user = User.query.get(user_id)
+        if user:
+            user.role = new_role
+            db.session.commit()
+            flash(f"Role updated for {user.username} to {new_role}", 'success')
+        else:
+            flash('User not found', 'danger')
+    users = User.query.all()
+    return render_template('modify_roles.html', users=users)
+
+
+
+if __name__ == '__main__':
+    app.run(port=8080, debug=True)
