@@ -252,5 +252,34 @@ def dashboard():
     else:
         return render_template('user_dashboard.html')
 
+@app.route('/contact', methods=['GET', 'POST'])
+def contact():
+    if request.method == 'POST':
+        full_name = request.form['full-name']
+        email = request.form['email']
+        message = request.form['message']
+
+        # Process the contact form data here (e.g., send an email or save to a database)
+        flash('Message sent successfully!', 'success')
+        return redirect(url_for('contact'))
+
+    return render_template('contact.html')
+
+@app.route('/password-reset', methods=['GET', 'POST'])
+def password_reset():
+    if request.method == 'POST':
+        email = request.form['email']
+
+        # Process the password reset request here (e.g., send a password reset link)
+        flash('Password reset instructions have been sent to your email!', 'success')
+        return redirect(url_for('password_reset'))
+
+    return render_template('password-reset.html')
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+
 if __name__ == '__main__':
     app.run(port=8080, debug=True)
