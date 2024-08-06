@@ -13,7 +13,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from werkzeug.security import generate_password_hash, check_password_hash
 
-
 # used directories for data, downloading and uploading files
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files/resumes/')
 DOWNLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files/outputs/')
@@ -45,6 +44,7 @@ ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'doc', 'docx'])
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
+    email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
     role = db.Column(db.String(50), nullable=False)
 
@@ -152,19 +152,20 @@ def register():
     if request.method == 'POST':
         try:
             username = request.form['username']
+            email = request.form['email']
             password = request.form['password']
             role = 'user'  # Set default role to 'user'
 
-            # Check if the username already exists
-            existing_user = User.query.filter_by(username=username).first()
+            # Check if the username or email already exists
+            existing_user = User.query.filter((User.username == username) | (User.email == email)).first()
             if existing_user:
-                flash('Username already exists', 'danger')
-                app.logger.info(f"Registration failed: Username already exists for {username}")
+                flash('Username or email already exists', 'danger')
+                app.logger.info(f"Registration failed: Username or email already exists for {username}")
                 return redirect(url_for('register'))
 
             # Hash the password
             hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-            new_user = User(username=username, password=hashed_password, role=role)
+            new_user = User(username=username, email=email, password=hashed_password, role=role)
             db.session.add(new_user)
             db.session.commit()
 
@@ -183,14 +184,24 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
+        email = request.form['email']
         password = request.form['password']
-        user = User.query.filter_by(username=username).first()
+        user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password, password):
             login_user(user)
             return redirect(url_for('admin_dashboard'))
         flash('Invalid credentials', 'danger')
     return render_template('login.html')
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    if current_user.role == 'admin':
+        return render_template('admin_dashboard.html')
+    elif current_user.role == 'project_manager':
+        return render_template('index.html')
+    else:
+        return render_template('user_dashboard.html')
 
 @app.route('/admin/dashboard', methods=['GET', 'POST'])
 @login_required
@@ -203,13 +214,14 @@ def admin_dashboard():
         action = request.form.get('action')
         if action == 'add_user':
             username = request.form['username']
+            email = request.form['email']
             password = request.form['password']
             role = request.form['role']
-            if User.query.filter_by(username=username).first():
-                flash('Username already exists', 'danger')
+            if User.query.filter((User.username == username) | (User.email == email)).first():
+                flash('Username or email already exists', 'danger')
             else:
                 hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-                new_user = User(username=username, password=hashed_password, role=role)
+                new_user = User(username=username, email=email, password=hashed_password, role=role)
                 db.session.add(new_user)
                 db.session.commit()
                 flash('User added successfully', 'success')
@@ -236,21 +248,29 @@ def admin_dashboard():
     users = User.query.all()
     return render_template('admin_dashboard.html', users=users)
 
+@app.route('/reset_password', methods=['GET', 'POST'])
+def reset_password():
+    if request.method == 'POST':
+        email = request.form['email']
+        user = User.query.filter_by(email=email).first()
+        if user:
+            # Implement password reset logic here (e.g., send reset link via email)
+            flash('Password reset link sent to your email', 'success')
+            app.logger.info(f"Password reset link sent to {email}")
+            return redirect(url_for('login'))
+        else:
+            flash('Email not found', 'danger')
+    return render_template('reset_password.html')
+
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
     return redirect(url_for('login'))
 
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    if current_user.role == 'admin':
-        return render_template('admin_dashboard.html')
-    elif current_user.role == 'project_manager':
-        return render_template('index.html')
-    else:
-        return render_template('user_dashboard.html')
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
 
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
@@ -276,10 +296,8 @@ def password_reset():
 
     return render_template('password-reset.html')
 
-@app.errorhandler(404)
-def page_not_found(e):
-    return render_template('404.html'), 404
-
 
 if __name__ == '__main__':
-    app.run(port=8080, debug=True)
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
