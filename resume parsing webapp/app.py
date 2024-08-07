@@ -12,6 +12,7 @@ from flask import Flask, flash, request, redirect, url_for, render_template, sen
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 # used directories for data, downloading and uploading files
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files/resumes/')
@@ -212,6 +213,8 @@ def admin_dashboard():
 
     if request.method == 'POST':
         action = request.form.get('action')
+
+        # Handling user-related actions
         if action == 'add_user':
             username = request.form['username']
             email = request.form['email']
@@ -225,6 +228,7 @@ def admin_dashboard():
                 db.session.add(new_user)
                 db.session.commit()
                 flash('User added successfully', 'success')
+
         elif action == 'update_role':
             user_id = request.form['user_id']
             new_role = request.form['new_role']
@@ -235,6 +239,7 @@ def admin_dashboard():
                 flash(f"Role updated for {user.username} to {new_role}", 'success')
             else:
                 flash('User not found', 'danger')
+
         elif action == 'delete_user':
             user_id = request.form['user_id']
             user = User.query.get(user_id)
@@ -245,8 +250,44 @@ def admin_dashboard():
             else:
                 flash('User not found', 'danger')
 
+        # Handling file upload
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename == '':
+                flash('No selected file')
+                return redirect(request.url)
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                flash('File successfully uploaded')
+                return redirect(url_for('admin_dashboard'))
+
     users = User.query.all()
     return render_template('admin_dashboard.html', users=users)
+
+
+@app.route('/admin/upload_cv', methods=['GET', 'POST'])
+@login_required
+def upload_cv():
+    if current_user.role != 'admin':
+        flash('Access denied. Only admins can access this page.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('No file part')
+            return redirect(request.url)
+        file = request.files['file']
+        if file.filename == '':
+            flash('No selected file')
+            return redirect(request.url)
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            flash('File successfully uploaded')
+            return redirect(url_for('upload_cv'))
+
+    return render_template('upload_cv.html')
 
 @app.route('/reset_password', methods=['GET', 'POST'])
 def reset_password():
@@ -295,7 +336,6 @@ def password_reset():
         return redirect(url_for('password_reset'))
 
     return render_template('password-reset.html')
-
 
 if __name__ == '__main__':
     with app.app_context():
