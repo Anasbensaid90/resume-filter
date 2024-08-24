@@ -8,13 +8,15 @@ import pandas as pd
 import json
 import os
 import uuid
-from flask import Flask, flash, request, redirect, url_for, render_template, send_file, abort
+from flask import Flask, flash, request, redirect, url_for, render_template, send_file, abort,jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-
+import sqlite3 as sql  # Ensure this import is at the top of your file
+import json
 # used directories for data, downloading and uploading files
+
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files/resumes/')
 DOWNLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files/outputs/')
 DATA_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Data/')
@@ -49,6 +51,8 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(150), nullable=False)
     role = db.Column(db.String(50), nullable=False)
 
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -64,7 +68,11 @@ def home():
 def main_page():
     return redirect(url_for('home'))
 
-@app.route('/', methods=['POST'])
+def connect_db():
+    return sql.connect(os.path.join(app.config['DATA_FOLDER'], 'HDR_CV_CREATOR.db'))
+
+
+@app.route('/dashboard', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
         flash('No file part')
@@ -336,6 +344,94 @@ def password_reset():
         return redirect(url_for('password_reset'))
 
     return render_template('password-reset.html')
+def get_db_connection():
+    conn = sql.connect('Data/HDR_CV_CREATOR.db')
+    conn.row_factory = sql.Row
+    return conn
+
+@app.route('/api/ressources', methods=['GET'])
+def get_ressources():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT Nom FROM Personnel_ADI')
+    ressources = [row['Nom'] for row in cursor.fetchall()]
+    conn.close()
+    return jsonify(ressources)
+
+@app.route('/api/domaines', methods=['GET'])
+def get_domaines():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT DISTINCT Domaine FROM PROJETS_ADI')
+    domaines = [row['Domaine'] for row in cursor.fetchall()]
+    conn.close()
+    return jsonify(domaines)
+@app.route('/add_person', methods=['GET', 'POST'])
+def add_person():
+    if request.method == 'POST':
+        try:
+            # Saisie des informations
+            nom = request.form['nom'].upper()
+            prenom = request.form['prenom'].capitalize()
+            dn = request.form['dn']
+            sf = 'Marié' if request.form['sf'].upper() == 'M' else 'Célibataire'
+            dpe = request.form['dpe']
+            pa = ["Ingénieur d'études", "Ingénieur confirmé", "Chef de projet", "Chef de département", "Technicien", "Technicien supérieur", "Technicien principal"][int(request.form['pa']) - 1]
+            n = 'Marocaine' if request.form['n'].upper() == 'M' else 'Autre'
+
+            # Connexion à la base de données
+            bd = connect_db()
+            bdc = bd.cursor()
+
+            # Insertion dans Personnel_ADI
+            statement = "INSERT INTO Personnel_ADI VALUES (?, ?, ?, ?, ?, ?, ?, 'b')"
+            bdc.execute(statement, (nom, prenom, n, dn, sf, dpe, pa))
+
+            # Insertion dans Titres_universitaires
+            nd = int(request.form['nd'])
+            for i in range(nd):
+                U = request.form[f'universite_{i}']
+                D = request.form[f'titre_{i}']
+                Date = request.form[f'date_{i}']
+                bdc.execute("INSERT INTO Titres_universitaires VALUES (?, ?, ?, ?, ?)", (nom, prenom, U, D, Date))
+
+            # Insertion dans Formations_Continues
+            nf = int(request.form['nf'])
+            for i in range(nf):
+                U = request.form[f'formation_universite_{i}']
+                F = request.form[f'formation_titre_{i}']
+                Date = request.form[f'formation_date_{i}']
+                bdc.execute("INSERT INTO Formations_Continues VALUES (?, ?, ?, ?, ?)", (nom, prenom, F, U, Date))
+
+            # Insertion dans les tables de langues
+            nla = request.form['nla']
+            la = ["Allemand", "Anglais", "Arabe", "Espagnole", "Français"]
+            NLA = [la[int(x) - 1] for x in nla]
+            for Langue in NLA:
+                Parlé = int(request.form[f'{Langue}_parle'])
+                Lu = int(request.form[f'{Langue}_lu'])
+                Ecrit = int(request.form[f'{Langue}_ecrit'])
+                bdc.execute(f"INSERT INTO {Langue} VALUES (?, ?, ?, ?, ?)", (nom, prenom, Parlé, Lu, Ecrit))
+
+            # Insertion dans Outils_Informatiques
+            no = int(request.form['no'])
+            for i in range(no):
+                outil = request.form[f'outil_{i}'].capitalize()
+                bdc.execute("INSERT INTO Outils_Informatiques VALUES (?, ?, ?)", (nom, prenom, outil))
+
+            # Sauvegarde et fermeture
+            bd.commit()
+            bd.close()
+
+            flash('Personne ajoutée avec succès', 'success')
+            return redirect(url_for('index'))
+
+        except Exception as e:
+            flash(f'Erreur lors de l\'ajout : {str(e)}', 'danger')
+            app.logger.error(f"Erreur lors de l'ajout de la personne : {e}")
+            return redirect(url_for('add_person'))
+
+    return render_template('add_person.html')
 
 if __name__ == '__main__':
     with app.app_context():

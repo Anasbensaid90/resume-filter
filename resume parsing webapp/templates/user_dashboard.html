@@ -1,16 +1,118 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Dashboard</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
+    <title>Créateur de CV HDR</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 60%;
+            margin: auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-top: 50px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .form-group button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #28a745;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .form-group button:hover {
+            background-color: #218838;
+        }
+    </style>
 </head>
 <body>
-<div class="container mt-5">
-    <h1>User Dashboard</h1>
-    <p>Welcome, {{ current_user.username }}!</p>
-    <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+<div class="container">
+    <h1>Créateur de CV HDR</h1>
+    <form action="/submit" method="post">
+        <div class="form-group">
+            <label for="ressource">Ressource :</label>
+            <select id="ressource" name="ressource">
+                <!-- Options will be populated dynamically -->
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="role">Rôle dans le projet :</label>
+            <input type="text" id="role" name="role">
+        </div>
+        <div class="form-group">
+            <label for="domaine">Domaine :</label>
+            <select id="domaine" name="domaine">
+                <!-- Options will be populated dynamically -->
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="mots">Mots Clés :</label>
+            <input type="text" id="mots" name="mots">
+        </div>
+        <div class="form-group">
+            <button type="submit">Créer CV</button>
+        </div>
+    </form>
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Fetch and populate the Ressource dropdown
+        fetch('/api/ressources')  // Adjust the URL to your API endpoint
+            .then(response => response.json())
+            .then(data => {
+                const ressourceSelect = document.getElementById('ressource');
+                data.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item;
+                    option.textContent = item;
+                    ressourceSelect.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error fetching ressources:', error));
+
+        // Fetch and populate the Domaine dropdown
+        fetch('/api/domaines')  // Adjust the URL to your API endpoint
+            .then(response => response.json())
+            .then(data => {
+                const domaineSelect = document.getElementById('domaine');
+                data.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item;
+                    option.textContent = item;
+                    domaineSelect.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error fetching domaines:', error));
+    });
+</script>
 </body>
 </html>

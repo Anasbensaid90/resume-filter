@@ -9,18 +9,21 @@
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
     <style>
         body {
-            padding-top: 56px;
+            padding-top: 0;
             background-color: #f8f9fa;
             font-family: 'Arial', sans-serif;
             color: #343a40;
         }
         .navbar {
-            background-color: #007bff;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            background: rgba(0, 0, 0, 0.8) !important; /* Slightly transparent black */
+            box-shadow: none; /* Remove any box shadow if present */
+            border: none; /* Remove any border if present */
         }
-        .navbar-brand {
-            font-size: 1.5rem;
-            font-weight: bold;
+        .navbar-brand, .nav-link {
+            color: #ffffff; /* White text color */
+        }
+        .navbar-brand:hover, .nav-link:hover {
+            color: #f8f9fa; /* Light grey text color on hover */
         }
         .container {
             margin-top: 20px;
@@ -110,8 +113,20 @@
     </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-md navbar-dark fixed-top">
-    <a class="navbar-brand" href="/">ADI</a>
+<nav class="navbar navbar-expand-lg">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">ADI</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="/">Project Manager</a>
+                </li>
+            </ul>
+        </div>
+    </div>
 </nav>
 <div class="container">
     <div class="upload-section mt-4">
